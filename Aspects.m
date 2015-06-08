@@ -19,6 +19,8 @@ typedef NS_OPTIONS(int, AspectBlockFlags) {
 	AspectBlockFlagsHasCopyDisposeHelpers = (1 << 25),
 	AspectBlockFlagsHasSignature          = (1 << 30)
 };
+
+//定义一个 Aspect 的结构体
 typedef struct _AspectBlock {
 	__unused Class isa;
 	AspectBlockFlags flags;
@@ -56,6 +58,7 @@ typedef struct _AspectBlock {
 @end
 
 // Tracks all aspects for an object/class.
+// 这个类是存储被hook的方法用的，每一个被hook的都有一个对应的该类
 @interface AspectsContainer : NSObject
 - (void)addAspect:(AspectIdentifier *)aspect withOptions:(AspectOptions)injectPosition;
 - (BOOL)removeAspect:(id)aspect;
@@ -95,6 +98,7 @@ static NSString *const AspectsMessagePrefix = @"aspects_";
                       withOptions:(AspectOptions)options
                        usingBlock:(id)block
                             error:(NSError **)error {
+    NSLog(@"%s",__func__);
     return aspect_add((id)self, selector, options, block, error);
 }
 
@@ -103,6 +107,7 @@ static NSString *const AspectsMessagePrefix = @"aspects_";
                       withOptions:(AspectOptions)options
                        usingBlock:(id)block
                             error:(NSError **)error {
+    NSLog(@"%s",__func__);
     return aspect_add(self, selector, options, block, error);
 }
 
@@ -153,6 +158,7 @@ static BOOL aspect_remove(AspectIdentifier *aspect, NSError **error) {
     return success;
 }
 
+//加锁执行,OSSpinLock锁是很快的锁
 static void aspect_performLocked(dispatch_block_t block) {
     static OSSpinLock aspect_lock = OS_SPINLOCK_INIT;
     OSSpinLockLock(&aspect_lock);
@@ -160,6 +166,7 @@ static void aspect_performLocked(dispatch_block_t block) {
     OSSpinLockUnlock(&aspect_lock);
 }
 
+//获取具有 AspectsMessagePrefix 前缀的 SEL 方法。
 static SEL aspect_aliasForSelector(SEL selector) {
     NSCParameterAssert(selector);
 	return NSSelectorFromString([AspectsMessagePrefix stringByAppendingFormat:@"_%@", NSStringFromSelector(selector)]);
@@ -659,9 +666,11 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
         _parentEntry = parent;
         _selectorNames = [NSMutableSet new];
     }
+    NSLog(@"%s",__func__);
     return self;
 }
 - (NSString *)description {
+    NSLog(@"%s",__func__);
     return [NSString stringWithFormat:@"<%@: %@, trackedClass: %@, selectorNames:%@, parent:%p>", self.class, self, NSStringFromClass(self.trackedClass), self.selectorNames, self.parentEntry];
 }
 
@@ -674,6 +683,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 
 // Thanks to the ReactiveCocoa team for providing a generic solution for this.
 - (id)aspect_argumentAtIndex:(NSUInteger)index {
+    NSLog(@"%s",__func__);
 	const char *argType = [self.methodSignature getArgumentTypeAtIndex:index];
 	// Skip const type qualifier.
 	if (argType[0] == _C_CONST) argType++;
@@ -740,6 +750,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 }
 
 - (NSArray *)aspects_arguments {
+    NSLog(@"%s",__func__);
 	NSMutableArray *argumentsArray = [NSMutableArray array];
 	for (NSUInteger idx = 2; idx < self.methodSignature.numberOfArguments; idx++) {
 		[argumentsArray addObject:[self aspect_argumentAtIndex:idx] ?: NSNull.null];
@@ -755,6 +766,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 @implementation AspectIdentifier
 
 + (instancetype)identifierWithSelector:(SEL)selector object:(id)object options:(AspectOptions)options block:(id)block error:(NSError **)error {
+    NSLog(@"%s",__func__);
     NSCParameterAssert(block);
     NSCParameterAssert(selector);
     NSMethodSignature *blockSignature = aspect_blockMethodSignature(block, error); // TODO: check signature compatibility, etc.
@@ -775,6 +787,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 }
 
 - (BOOL)invokeWithInfo:(id<AspectInfo>)info {
+    NSLog(@"%s",__func__);
     NSInvocation *blockInvocation = [NSInvocation invocationWithMethodSignature:self.blockSignature];
     NSInvocation *originalInvocation = info.originalInvocation;
     NSUInteger numberOfArguments = self.blockSignature.numberOfArguments;
@@ -814,10 +827,12 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 }
 
 - (NSString *)description {
+    NSLog(@"%s",__func__);
     return [NSString stringWithFormat:@"<%@: %p, SEL:%@ object:%@ options:%tu block:%@ (#%tu args)>", self.class, self, NSStringFromSelector(self.selector), self.object, self.options, self.block, self.blockSignature.numberOfArguments];
 }
 
 - (BOOL)remove {
+    NSLog(@"%s",__func__);
     return aspect_remove(self, NULL);
 }
 
@@ -829,10 +844,12 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 @implementation AspectsContainer
 
 - (BOOL)hasAspects {
+    NSLog(@"%s",__func__);
     return self.beforeAspects.count > 0 || self.insteadAspects.count > 0 || self.afterAspects.count > 0;
 }
 
 - (void)addAspect:(AspectIdentifier *)aspect withOptions:(AspectOptions)options {
+    NSLog(@"%s",__func__);
     NSParameterAssert(aspect);
     NSUInteger position = options&AspectPositionFilter;
     switch (position) {
@@ -843,6 +860,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 }
 
 - (BOOL)removeAspect:(id)aspect {
+    NSLog(@"%s",__func__);
     for (NSString *aspectArrayName in @[NSStringFromSelector(@selector(beforeAspects)),
                                         NSStringFromSelector(@selector(insteadAspects)),
                                         NSStringFromSelector(@selector(afterAspects))]) {
@@ -859,6 +877,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 }
 
 - (NSString *)description {
+    NSLog(@"%s",__func__);
     return [NSString stringWithFormat:@"<%@: %p, before:%@, instead:%@, after:%@>", self.class, self, self.beforeAspects, self.insteadAspects, self.afterAspects];
 }
 
@@ -872,6 +891,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 @synthesize arguments = _arguments;
 
 - (id)initWithInstance:(__unsafe_unretained id)instance invocation:(NSInvocation *)invocation {
+    NSLog(@"%s",__func__);
     NSCParameterAssert(instance);
     NSCParameterAssert(invocation);
     if (self = [super init]) {
@@ -882,6 +902,7 @@ static void aspect_deregisterTrackedSelector(id self, SEL selector) {
 }
 
 - (NSArray *)arguments {
+    NSLog(@"%s",__func__);
     // Lazily evaluate arguments, boxing is expensive.
     if (!_arguments) {
         _arguments = self.originalInvocation.aspects_arguments;
